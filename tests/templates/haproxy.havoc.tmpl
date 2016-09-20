@@ -1,6 +1,8 @@
 global
     log 127.0.0.1 len 65535 local1 debug
+    {% if hostname %}
     log-send-hostname {{hostname}}
+    {% endif %}
 
     nbproc {{cpu_count-cpu_reserved}}
     {% for cpu in range(cpu_reserved,cpu_count) %}  cpu-map {{cpu}} {{cpu}}
@@ -18,7 +20,6 @@ global
     daemon
 
 {% raw %}
-    # SSL Additions per Mozilla/HAProxy RTBDEV-3541
     tune.ssl.default-dh-param   1024
     tune.ssl.cachesize          6000000  # default: 20K
     tune.ssl.lifetime           3600  # default: 300 (seconds)
@@ -62,13 +63,11 @@ listen           stats
     option       httpclose
     stats        uri /stats
     stats        realm Global\ statistics
-    stats        auth admin:b@lancem0gul
     maxconn      50
 
-frontend         rtb
+frontend         web
 
-    bind         0.0.0.0:80 name rtb-http
-    bind         0.0.0.0:443 name rtb-https ssl crt /opt/haproxy/etc/tubemogul.pem
+    bind         0.0.0.0:443 name web-https ssl crt /etc/haproxy/cert.pem
 
     compression  algo gzip
     compression  type text/html text/plain text/javascript application/javascript application/xml text/css application/json text/xml
@@ -77,184 +76,31 @@ frontend         rtb
 
     http-request set-header X-Proto SSL if { ssl_fc }
 
-    monitor-uri     /crossdomain.xml
-    errorfile       200 /opt/haproxy/etc/crossdomain.xml
-
 {% endraw %}
-{% if instances['rtb-adserver-ba'] %}
-    acl             is_adserverba hdr_reg(Host) (^rtb-ba-ad-|as-pub)(f|).*.t(ube|)mogul.com
-    acl             is_adserverba hdr_reg(Host) ^a(v|d)(f|).t(ube|)mogul.com
-    use_backend     adserver-ba if is_adserverba
-{% endif %}
-{% if instances['rtb-bidder-ba'] %}
-    acl             is_bidderba hdr_reg(Host) (^pub(f|.geodns|)|rtb-ba-lb-.*).t(ube|)mogul.com
-    acl             is_bidderba hdr_reg(Host) ^pv(f|.geodns|).t(ube|)mogul.com
-    use_backend     bidder-ba if is_bidderba
-{% endif %}
-{% if instances['rtb-bidder-display'] %}
-# https://confluence.tubemogul.info/display/GLOSS/Bidder+endpoint+definition
-    acl             is_bidderdisplay hdr_reg(Host) ^rd10(use|usw|euw|aps).t(ube|)mogul.com
-    acl             is_bidderdisplay hdr_reg(Host) ^rd6(use|usw|euw|aps).t(ube|)mogul.com
-    acl             is_bidderdisplay hdr_reg(Host) ^r03(use|usw|euw|aps).t(ube|)mogul.com
-    acl             is_bidderdisplay hdr_reg(Host) ^rd167(use|usw|euw|aps).t(ube|)mogul.com
-    acl             is_bidderdisplay hdr_reg(Host) ^rtb-google-display-(us-east|us-west|eu-west|ap-southeast).t(ube|)mogul.com
-    use_backend     bidder-display if is_bidderdisplay
 
-    acl             is_rubicon url_beg -i /rubicon/btXxJqnWClDtkAjBpZEd
-    use_backend     bidder-display if is_rubicon
-{% endif %}
-{% if instances['rtb-bidder-liverail'] %}
-    acl         is_liverail url_beg -i /liverail
-    use_backend  bidder-liverail if is_liverail
-{% endif %}
-{% raw %}
+    default_backend appa
 
-    acl         is_as_vast hdr_reg(Host) (vast(f|).t(ube|)mogul.com|display.t(ube|)mogul.com|ibv.t(ube|)mogul.com)
-    acl         is_as_proxy hdr_reg(Host) (vastproxy(f|).t(ube|)mogul.com)
-    acl         is_as hdr_reg(Host) (^as(f|).t(ube|)mogul.com|ad-serv.t(ube|)mogul.com|as-.*.t(ube|)mogul.com)
-    acl         is_as hdr_reg(Host) ^a(v|d)(f|).t(ube|)mogul.com
-    acl         is_asv hdr_reg(Host) (^asv(f|).t(ube|)mogul.com)
-
-    acl         is_event hdr_reg(Host) (^rtb-lb-event.*.t(ube|)mogul.com)
-    acl         is_event url_beg -i /rtb/e.png
-
-    # Ref: INF-4872
-    # tmvpn, TM IPs on own AS, Private Subnet, Sentinel IPs, EMY Office
-    acl         trusted_ips   src 72.52.238.108 72.52.238.36 72.52.239.88 72.52.238.145 198.98.22.0/23 10.0.0.0/8 54.235.151.169 54.83.24.12 54.225.66.46 64.201.252.132 54.225.102.22 54.87.10.73 54.163.45.124 54.196.226.77 75.101.199.50
-    acl         url url_reg ^/(cachequery|--vb|--info)
-    http-request deny  if url !trusted_ips
-
-    # Ref: OPS-19075
-    # Drop request larger than 32K (we should return 413 instead of 403)
-    http-request deny if { hdr_val(content-length) ge 32768 }
-
-    acl         is_google   url_beg -i /google
-
-    use_backend  adserver        if is_as_vast
-    use_backend  adserver        if is_as_proxy
-    use_backend  adserver        if is_as
-    use_backend  asv             if is_asv
-    use_backend  adevent         if is_event
-    use_backend  bidder-google   if is_google
-
-    default_backend bidder-generic
-
-#AdServer requests
-backend         asv
-    option      httpchk HEAD /cachequery/ HTTP/1.0
+backend         appa
+    option      httpchk HEAD /health/ HTTP/1.0
     http-check  expect status 200
     balance     leastconn
     timeout     http-keep-alive 1
     no option   redispatch
     retries     0
 {% endraw %}
-    {% for i in instances['asv']|sort(attribute='name') %}server {{i.name}} {{i.ip_address}}:80 check inter 20000 fastinter 1000 downinter 2000 rise 2 fall 6 observe layer7 maxconn 1000
+    {% for i in instances['appa']|sort(attribute='name') %}server {{i.name}} {{i.ip_address}}:80 check inter 20000 fastinter 1000 downinter 2000 rise 2 fall 6 observe layer7 maxconn 1000
     {% endfor %}
 
-{% if instances['rtb-adserver-ba'] %}
+{% if instances['appb'] %}
 {% raw %}
-#AdServer requests
-backend         adserver-ba
-    option      httpchk HEAD /cachequery/ HTTP/1.0
+backend         appb
+    option      httpchk HEAD /health/ HTTP/1.0
     http-check  expect status 200
     balance     leastconn
     timeout     http-keep-alive 1
     no option   redispatch
     retries     1
 {% endraw %}
-    {% for i in instances['rtb-adserver-ba']|sort(attribute='name') %}server {{i.name}} {{i.ip_address}}:80 check inter 20000 fastinter 1000 downinter 2000 rise 2 fall 6 observe layer7 maxconn 1000
-    {% endfor %}
-{% endif %}
-
-{% raw %}
-#AdServer requests
-backend         adserver
-    option      httpchk HEAD /cachequery/ HTTP/1.0
-    http-check  expect status 200
-    balance     leastconn
-    timeout     http-keep-alive 1
-    no option   redispatch
-    retries     1
-{% endraw %}
-    {% for i in instances['rtb-adserver']|sort(attribute='name') %}server {{i.name}} {{i.ip_address}}:80 check inter 20000 fastinter 1000 downinter 2000 rise 2 fall 6 observe layer7 maxconn 1000
-    {% endfor %}
-{% raw %}
-# AdEvent requests
-backend         adevent
-    balance     leastconn
-    option      httpchk POST /rtb/e.png?e=win&aid=nbQaJ3zGQu-85sFbuYEWNg.1&ad=578602&cp=32482&slot=1&x_price=20&ets=1336511416361&tz=America%2FNew_York&source=google&suid=ABC&country=US&region=US-NY&mc=48&ap=0&ut=0&vis=UNKNOWN&site=dailymotion.com&bp=20000&_L0=&x_ext_site=&_R0=&curr=USD&exr=1.0&fid=pu5XUpnpw5hpShL7VG3B&c=3137&v=1&auth=yqsszJlUoBYOE7QXsU5t-p6sp6A&x_r=E9B3Eg&x_debug=1 HTTP/1.0
-    http-check  expect status 200
-    option      httpclose
-    option      forceclose
-    timeout     http-keep-alive 0
-{% endraw %}
-    {% for i in instances['rtb-adevent']|sort(attribute='name') %}server {{i.name}} {{i.ip_address}}:80 check inter 20000 fastinter 1000 downinter 2000 rise 2 fall 6 observe layer7 maxconn 1000
-    {% endfor %}
-{% raw %}
-# Bidder
-backend bidder-generic
-    balance     leastconn
-    option httpchk HEAD /crossdomain.xml HTTP/1.0
-    http-check expect status 200
-    no option redispatch
-    retries     0
-    timeout     queue 500ms
-{% endraw %}
-    {% for i in instances['rtb-bidder-generic']|sort(attribute='name') %}server {{i.name}} {{i.ip_address}}:80 check inter 5000 fastinter 1000 downinter 2000 rise 2 fall 5 weight 1 slowstart 15 observe layer7
-    {% endfor %}
-
-{% if instances['rtb-bidder-ba'] %}
-{% raw %}
-# Bidder BA
-backend bidder-ba
-    balance     leastconn
-    option httpchk HEAD /crossdomain.xml HTTP/1.0
-    http-check expect status 200
-    no option redispatch
-    retries     0
-    timeout     queue 500ms
-{% endraw %}
-    {% for i in instances['rtb-bidder-ba']|sort(attribute='name') %}server {{i.name}} {{i.ip_address}}:80 check inter 5000 fastinter 1000 downinter 2000 rise 2 fall 5 weight 1 slowstart 15 observe layer7
-    {% endfor %}
-{% endif %}
-
-{% raw %}
-# Bidder Google
-backend bidder-google
-    balance     leastconn
-    option httpchk HEAD /crossdomain.xml HTTP/1.0
-    http-check expect status 200
-    no option redispatch
-    retries     0
-    timeout     queue 500ms
-{% endraw %}
-    {% for i in instances['rtb-bidder-google']|sort(attribute='name') %}server {{i.name}} {{i.ip_address}}:80 check inter 5000 fastinter 1000 downinter 2000 rise 2 fall 5 weight 1 slowstart 15 observe layer7
-    {% endfor %}
-
-{% if instances['rtb-bidder-liverail'] %}
-# Bidder Liverail
-backend bidder-liverail
-    balance     leastconn
-    option httpchk HEAD /crossdomain.xml HTTP/1.0
-    http-check expect status 200
-    no option redispatch
-    retries     0
-    timeout     queue 500ms
-
-    {% for i in instances['rtb-bidder-liverail']|sort(attribute='name') %}server {{i.name}} {{i.ip_address}}:80 check inter 5000 fastinter 1000 downinter 2000 rise 2 fall 5 weight 1 slowstart 15 observe layer7
-    {% endfor %}
-{% endif %}
-
-{% if instances['rtb-bidder-display'] %}
-# Bidder Display
-backend bidder-display
-    balance     leastconn
-    option httpchk HEAD /crossdomain.xml HTTP/1.0
-    http-check expect status 200
-    no option redispatch
-    retries     0
-    timeout     queue 500ms
-
-    {% for i in instances['rtb-bidder-display']|sort(attribute='name') %}server {{i.name}} {{i.ip_address}}:80 check inter 5000 fastinter 1000 downinter 2000 rise 2 fall 5 weight 1 slowstart 15 observe layer7
+    {% for i in instances['appb']|sort(attribute='name') %}server {{i.name}} {{i.ip_address}}:80 check inter 20000 fastinter 1000 downinter 2000 rise 2 fall 6 observe layer7 maxconn 1000
     {% endfor %}
 {% endif %}

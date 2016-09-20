@@ -11,4 +11,6 @@ ADD . /havoc
 
 WORKDIR /havoc
 
-RUN python setup.py install
+RUN pip install -r requirements.txt
+
+RUN python setup.py install 

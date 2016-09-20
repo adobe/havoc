@@ -1,0 +1,4 @@
+---
+template: tests/templates/haproxy.havoc.tmpl
+haproxy-cfg: tests/haproxy.cfg
+pools: 'appa,appb'
