@@ -1,0 +1,6 @@
+jinja2
+click
+boto
+python-novaclient
+pylint
+python-daemon
