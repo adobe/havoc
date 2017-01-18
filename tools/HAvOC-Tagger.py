@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 HAvOC (HAproxy clOud Configuration)
-Generate HAproxy Configuration based on AWS/OpenStack API instead of ZK
+Generate HAproxy Configuration based on AWS/OpenStack API
 """
 
 __version = 0.2
