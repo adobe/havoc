@@ -46,10 +46,11 @@ Options:
 
 ## Installation
 
-```
-pip install havoc
-```
+TODO
 
-## Testing
+## Contributors
 
-## Contributing
+* Joseph Herlant ([aerostitch](https://github.com/aerostitch))
+* Julien Fabre  ([pryz](https://github.com/pryz))
+* Nicolas Brousse ([orieg](https://github.com/orieg))
+* Oleg Galitskiy ([Galitskiy](https://github.com/Galitskiy))
