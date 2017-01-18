@@ -9,48 +9,17 @@ global
     {% endfor %}
     {% for cpu in range(cpu_reserved,cpu_count) %}stats socket  /var/run/haproxy-{{cpu}}.sock mode 0600 level admin process {{cpu}}
     {% endfor %}
-    spread-checks   50
-    maxconn         50000
     pidfile         /var/run/haproxy.pid
-    tune.bufsize    32768
-    tune.maxrewrite 2048
-    ulimit-n        1000000
     user            haproxy
     group           haproxy
     daemon
 
 {% raw %}
-    tune.ssl.default-dh-param   1024
-    tune.ssl.cachesize          6000000  # default: 20K
-    tune.ssl.lifetime           3600  # default: 300 (seconds)
-    tune.ssl.maxrecord          1419
-    ssl-default-bind-options no-sslv3
-    ssl-default-bind-ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:DHE-RSA-AES128-GCM-SHA256:DHE-DSS-AES128-GCM-SHA256:kEDH+AESGCM:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-ECDSA-AES256-SHA:DHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA:DHE-DSS-AES128-SHA256:DHE-RSA-AES256-SHA256:DHE-DSS-AES256-SHA:DHE-RSA-AES256-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA:AES:CAMELLIA:DES-CBC3-SHA:!aNULL:!eNULL:!EXPORT:!DES:!RC4:!MD5:!PSK:!aECDH:!EDH-DSS-DES-CBC3-SHA:!EDH-RSA-DES-CBC3-SHA:!KRB5-DES-CBC3-SHA
 
 defaults
     log           global
-    maxconn       50000
     mode          http
-    option        contstats
-    option        socket-stats
-    option        tcp-smart-accept
-    option        tcp-smart-connect
-    option        httplog
-    option        forwardfor
-    option        redispatch
-    option        persist
-    option        http-keep-alive
-    timeout       http-request 15s
-    timeout       http-keep-alive 5s
-    timeout       connect 4s
-    timeout       queue 3s
-    timeout       server 3s
-    timeout       client 15s
-    retries       1
     errorfile     408 /dev/null
-
-    #XXX: HAproxy 1.6 only
-    #http-reuse    safe
 
     log-format    {"bytes_uploaded":"%U","bytes_read":"%B","client_ip":"%ci","client_port":"%cp","backend_source_ip":"%bi","backend_source_port":"%bp","frontend_ip":"%fi","frontend_port":"%fp","hostname":"%H","unique-id":"%ID","server_ip":"%si","server_port":"%sp","gmt_date_time":"%T","tc":"%Tc","tq":"%Tq","tr":"%Tr","haproxy_timestamp":"%Ts","time":"%Tt","tw":"%Tw","actconn":"%ac","backend":"%b","beconn":"%bc","backend_queue":"%bq","captured_request_cookie":"%CC","http_request_counter":"%rt","captured_response_cookie":"%CS","frontend":"%f","frontend_name_transport":"%ft","feconn":"%fc","http_request":"%r","captured_request_headers":"%hr","pid":"%pid","retries":"%rc","server_name":"%s","srv_conn":"%sc","srv_queue":"%sq","ssl_ciphers":"%sslc","ssl_version":"%sslv","code":"%ST","date_time":"%t","termination_state":"%ts","local_date_time":"%Tl"}
 
@@ -71,10 +40,6 @@ frontend         web
 
     compression  algo gzip
     compression  type text/html text/plain text/javascript application/javascript application/xml text/css application/json text/xml
-
-    capture request header Host len 64
-
-    http-request set-header X-Proto SSL if { ssl_fc }
 
 {% endraw %}
 
